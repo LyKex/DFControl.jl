@@ -94,7 +94,7 @@ function configure!(s::Server)
             if local_choice == 1
                 result = server_command(s, "mkdir -p $dir")
                 if result.exitcode != 0
-                    @warn "Couldn't create $dir, try a different one."
+                    @warn "Couldn't create $dir, try a different one." 
                 end
             else
                 dir = ask_input(String, "Default Jobs directory")
@@ -118,11 +118,6 @@ function configure_local_port!(s::Server)
     end
 end
 
-"""
-    configure_local()
-
-Runs through interactive configuration of the local [`Server`](@ref).
-"""
 function configure_local()
     host = gethostname()
     @assert !exists(Server(name=host)) "Local server already configured."

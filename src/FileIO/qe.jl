@@ -800,24 +800,15 @@ function Base.push!(out::Dict, k::Symbol, v)
     end
 end
 
-# function qe_md_parse_total_energy(out, line, f)
-#     sline = split(line)
-#     e = parse(Float64, sline[5])
-#     # TODO what happens if one time step does not converge?
-#     # will pw continue?
-#     # if yes, then this func needs consider that and take the last
-#     # total energy from scf; if not, the out[:scf_steps] and out[:scf_converged]
-#     # is kind of unnecessary
-#     push!(out, :total_energy, e)
-# end
-
 function qe_md_parse_total_energy(out, line, f)
-    step = out[:step]
-    if haskey(out[:total_energy], step)
-        push!(out[:total_energy][step], parse(Float64, split(line)[end-1]))
-    else
-        out[:total_energy][step] = [parse(Float64, split(line)[end-1])]
-    end
+    sline = split(line)
+    e = parse(Float64, sline[5])
+    # TODO what happens if one time step does not converge?
+    # will pw continue?
+    # if yes, then this func needs consider that and take the last
+    # total energy from scf; if not, the out[:scf_steps] and out[:scf_converged]
+    # is kind of unnecessary
+    push!(out, :total_energy, e)
 end
 
 function qe_md_parse_step(out, line, f)
@@ -914,7 +905,8 @@ function qe_md_parse_finish(out, line, f)
     # push scf steps for last time step
     push!(out[:scf_steps], out[:scf_iteration])
     # delete temperary value
-    return delete!(out, :scf_iteration)
+    delete!(out, :scf_iteration)
+    return 
 end
 
 function qe_md_parse_converge(out, line, f)
@@ -926,6 +918,7 @@ function qe_md_parse_converge(out, line, f)
     return out[:scf_converged][end] = true
 end
 
+<<<<<<< Updated upstream
 const QE_MD_PARSE_FUNCTIONS::Vector{Pair{NeedleType,Any}} = ["Entering Dynamics" => qe_md_parse_step,
                                                              "Time step"         => qe_md_parse_timestep,
                                                              # "convergence has been"                  => qe_md_parse_convergence,
@@ -970,7 +963,8 @@ const QE_MD_PARSE_FUNCTIONS::Vector{Pair{NeedleType,Any}} = ["Entering Dynamics"
                                                              "Hubbard projectors" => qe_parse_Hubbard_values_new,
                                                              "init_run" => qe_parse_timing,
                                                              "Starting magnetic structure" => qe_parse_starting_magnetization,
-                                                             "Simplified LDA+U calculation" => qe_parse_starting_simplified_dftu]
+                                                             "Simplified LDA+U calculation" => qe_parse_starting_simplified_dftu,
+                                                         ]
 
 """
     qe_parse_pwmd_output(str::String; parse_funcs::Vector{Pair{String}}=Pair{String,<:Function}[])
@@ -1223,6 +1217,9 @@ function qe_parse_projwfc(filename)
     return states, bands
 end
 
+"""
+    parse hp perturb atom
+"""
 function qe_parse_pert_at(out, line, f)
     sline = split(line)
     if sline[1] == "Atom"
@@ -1307,15 +1304,16 @@ function extract_cell!(flags, cell_block)
 end
 
 """
-    parsing Hubbard U parameters prior to qe7.2 from qe input.
+    parsing Hubbard U parameters from qe input using syntax prior to qe7.2.
     To fully use Hubbard correction, use qe7.2 onwards where the input
-    takes a dedicated Hubbard block.
+    inlcudes a dedicated Hubbard block.
 """
 function qe_DFTU(speciesid::Int, atsyms::AbstractVector{Symbol},
                  parsed_flags::Dict{Symbol,Any})
     @warn "Try parsing Hubbard U parameters using old syntax (prior to qe7.2)."
     if haskey(parsed_flags, :Hubbard_U) && !iszero(parsed_flags[:Hubbard_U][speciesid])
         @debug "Hubbard U for atom $speciesid: $(parsed_flags[:Hubbard_U][speciesid])"
+<<<<<<< Updated upstream
         # TODO n and l is hardcoded according to default setting before qe7.2,
         # User can potential change manifolds by modifying source code which cannot be read from qe input
         # However, input file genereated from this will be correct since it is not used.
@@ -1324,6 +1322,14 @@ function qe_DFTU(speciesid::Int, atsyms::AbstractVector{Symbol},
         manifold = "$el-$(ELEMENT_TO_N[el_pure])$(ELEMENT_TO_L[el_pure])"
         return DFTU(; types = ["U"], values = [parsed_flags[:Hubbard_U][speciesid]],
                     manifolds = [manifold])
+=======
+        # TODO Hardcoded according to default qe setting before version 7.2,
+        # user can potential change hubbard manifolds by modifying source code.
+        # However, input file genereated will be correct.
+        el = Structures.element(atsyms[speciesid]).symbol
+        manifold = "$(ELEMENT_TO_N[el])$(ELEMENT_TO_L[el])"
+        return DFTU(; types=["U"], values=[parsed_flags[:Hubbard_U][speciesid]], manifolds=[manifold])
+>>>>>>> Stashed changes
     else
         return DFTU()
     end
@@ -1349,8 +1355,14 @@ function qe_magnetization(atid::Int, parsed_flags::Dict{Symbol,Any})
     end
 end
 
+<<<<<<< Updated upstream
 function extract_atoms!(parsed_flags, atsyms, atom_block, pseudo_block, hubbard_block,
                         cell::Mat3)
+=======
+"""
+"""
+function extract_atoms!(parsed_flags, atsyms, atom_block, pseudo_block, hubbard_block, cell::Mat3)
+>>>>>>> Stashed changes
     atoms = Atom[]
 
     option = atom_block.option
@@ -1721,7 +1733,10 @@ function qe_writeflag(f, flag, value)
     end
 end
 
+<<<<<<< Updated upstream
 # old qe
+=======
+>>>>>>> Stashed changes
 function qe_handle_hubbard_flags!(c::Calculation{QE}, str::Structure)
     u_ats = unique(str.atoms)
     isnc = Structures.isnoncolin(str)

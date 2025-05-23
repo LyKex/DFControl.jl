@@ -6,17 +6,11 @@ Tries to load the [`Job`](@ref) from `server` at directory `j.dir`.
 If no exact matching directory is found, a list of job directories that comprise
 `j.dir` will be returned.
 """
+
 function RemoteHPC.load(server::Server, j::Job)
     j.server = server.name
     
-    if j.version == last_version(server, j.dir)
-        dir = Jobs.main_job_dir(j.dir)
-    elseif !occursin(Jobs.VERSION_DIR_NAME, j.dir) && j.version != 0
-        dir = Jobs.version_dir(Jobs.main_job_dir(j.dir), j.version)
-    else
-        dir = j.dir
-    end
-    dir = abspath(server, dir)
+    dir = abspath(server, j.dir)
     
     info = load(server, dir)
     if info isa Vector
@@ -83,6 +77,16 @@ function RemoteHPC.load(server::Server, j::Job)
     version = last_version(server, j.dir)
     
     return Job(name, structure, calculations, j.dir, version, j.copy_temp_folders, server.name, environment.name)
+end
+
+function RemoteHPC.load(server::Server, j::Job, ver_dir::AbstractString, ver::Int64)
+    j.dir = joinpath(j.dir, ver_dir, string(ver))
+    return load(server, j)
+end
+
+function RemoteHPC.load(server::Server, j::Job, ver::Int64)
+    j.dir = joinpath(j.dir, Jobs.VERSION_DIR_NAME, string(ver))
+    return load(server, j)
 end
 
 function write_calculations(job::Job; fillexecs=true)
@@ -182,31 +186,45 @@ function RemoteHPC.save(job::Job, workflow = nothing; versioncheck=true, kwargs.
             end
         end
     end
-    
+
+    lazy_upload_pseudo(job)
+    Calculations.rm_tmp_flags!.(job.calculations)
+    return job
+end
+
+function lazy_upload_pseudo(job)
+    server = Server(job.server)
     # Here we lazily pull pseudos that are not located on the server we're sending stuff to
     pseudos = unique(y->y[1], map(x->(x.element.symbol, x.pseudo), job.structure.atoms))
-    for (el, p) in pseudos
+    for (el, p) in deepcopy(pseudos)
 
         if p == Pseudo()
             error("Pseudo not set for element $el. Use `set_pseudos!`.")
         end
-        
-        if p.server !== job.server
-            p.pseudo = isempty(p.pseudo) && !isempty(p.server) && isalive(Server(p.server)) && ispath(Server(p.server), p.path) ? read(Server(p.server), p.path, String) : p.pseudo
+
+        # read pseudo content if pseudo and job is not on the same server
+        if p.server != job.server
+            @debug "reading pseudo from server" p.server
+            to_read = isempty(p.pseudo) && !isempty(p.server) && isalive(Server(p.server)) && ispath(Server(p.server), p.path) 
+            p.pseudo = to_read ? read(Server(p.server), p.path, String) : p.pseudo
             p.server = job.server
             p.path = joinpath(job, "$el.UPF") 
             for a in job.structure[element(el)]
+                # so the pseudo will not write again using the same structure
                 a.pseudo = p
             end
         end
-        # Pseudo was not present yet
+
+        # write to job server
         if !isempty(p.pseudo)
+            @debug "writing pseudo file" p.path
             write(server, p.path, p.pseudo)
             p.pseudo = ""
         end
         
         linkpath = joinpath(job, "$el.UPF")
         if !ispath(server, linkpath) || p.path != realpath(server, linkpath) 
+            @debug "creating pseudo symlink"
             if ispath(server, linkpath)
                 rm(server, linkpath)
             end
@@ -562,7 +580,6 @@ function switch_version!(job::Job, version::Int)
         if version == last_version(job)
             out = load(Server(job.server), Job(Jobs.main_job_dir(job)))
         else
-            
             out = load(Server(job.server), Job(joinpath(Jobs.main_job_dir(job), Jobs.VERSION_DIR_NAME, "$(version)")))
         end
         for f in fieldnames(Job)

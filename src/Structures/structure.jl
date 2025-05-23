@@ -122,7 +122,8 @@ function set_cell!(structure::Structure, c::Mat3)
     for a in structure.atoms
         set_position!(a, a.position_cryst, cell_)
     end
-    return structure.cell = cell_
+    structure.cell = cell_
+    return structure
 end
 
 """
@@ -372,6 +373,8 @@ function international(s::SPGStructure; tolerance = DEFAULT_TOLERANCE)
                 (Ptr{Cchar}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}, Cint, Cdouble), res,
                 s.lattice, s.positions, s.species_indices, length(s.species_indices),
                 tolerance)
+    # convert to Julia int
+    num = Int(num)
     num == 0 && error("Could not determine the international symbol.")
 
     return num, join(convert(Vector{Char}, res[1:findfirst(iszero, res)-1]))

@@ -75,6 +75,29 @@ function Base.getproperty(dftu::DFTU, sym::Symbol)
     end
 end
 
+function Base.setproperty!(dftu::DFTU, sym::Symbol, value)
+    if String(sym) ∈ hubbard_type
+        id = findfirst(x -> x == String(sym), dftu.types)
+        if iszero(value)
+            if id !== nothing
+                deleteat!(dftu.values, id)
+                deleteat!(dftu.types, id)
+            end
+        else
+            # TODO value = 0
+            if id === nothing
+                push!(dftu.types, String(sym))
+                push!(dftu.values, value)
+                # manifolds is not set
+            else
+                dftu.values[id] = value
+            end
+        end
+    else
+        setfield!(dftu, sym, value)
+    end
+end
+
 function Base.convert(::Type{DFTU},
                       x::JLD2.ReconstructedMutable{:DFTU,(:l, :U, :J0, :α, :β, :J)})
     return DFTU(x.l, x.U, x.J0, x.α, x.β, x.J, "ortho-atomic")

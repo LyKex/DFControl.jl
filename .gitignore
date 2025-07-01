@@ -42,6 +42,7 @@ logs/
 
 # test assets (TODO should be put into artifacts)
 assets/mpirunflags\.jl
+test/testassets/test_job/*
 
 # CondaPkg
 .CondaPkg/*

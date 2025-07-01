@@ -78,8 +78,8 @@ Creates a new [`Calculation`](@ref) from the `template`, setting the `flags` of 
     additional_args::Dict{Any,Any} = Dict{Any,Any}() # for additional input files for a single calculation
 end
 
-function Calculation(name, flags, data, e, run, infile,
-                            outfile; additional_args = nothing)
+# type specific
+function Calculation(name, flags, data, e, run, infile, outfile, additional_args)
     if exec(e) ∈ Calculations.WAN_EXECS
         p = Wannier90
     elseif exec(e) ∈ Calculations.QE_EXECS
@@ -89,8 +89,11 @@ function Calculation(name, flags, data, e, run, infile,
     else
         error("Package not identified from execs $(exec(e)).")
     end
-    return Calculation{p}(name, flags, data, e, run, infile, outfile; additional_args)
+    return Calculation{p}(name, flags, data, e, run, infile, outfile, additional_args)
 end
+# for backward-compatibility
+Calculation(name, flags, data, e, run, infile, outfile) = 
+    Calculation(name, flags, data, e, run, infile, outfile, Dict{Any,Any}())
 
 function Calculation(name::String, flags::Pair{Symbol}...; kwargs...)
     out = Calculation(; name = name, kwargs...)

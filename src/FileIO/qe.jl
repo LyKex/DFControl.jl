@@ -53,13 +53,21 @@ end
 function qe_parse_Hubbard(out, line, f)
     hub_block = parse_Hubbard_block(f)
     # for some reason Calculation{QE7_2} needs specification of the type compared to QE
-    HubbardStateTuple = @NamedTuple{id::Int64, trace::@NamedTuple{up::Float64, down::Float64, total::Float64}, eigvals::@NamedTuple{up::Vector{Float64}, down::Vector{Float64}}, eigvecs::@NamedTuple{up::Matrix{Float64}, down::Matrix{Float64}}, occupations::@NamedTuple{up::Matrix{Float64}, down::Matrix{Float64}}, magmom::Float64}
+    HubbardStateTuple = @NamedTuple{id::Int64,
+                                    trace::@NamedTuple{up::Float64,down::Float64,
+                                                       total::Float64},
+                                    eigvals::@NamedTuple{up::Vector{Float64},
+                                                         down::Vector{Float64}},
+                                    eigvecs::@NamedTuple{up::Matrix{Float64},
+                                                         down::Matrix{Float64}},
+                                    occupations::@NamedTuple{up::Matrix{Float64},
+                                                             down::Matrix{Float64}},
+                                    magmom::Float64}
     if eltype(hub_block) != HubbardStateTuple
         @warn "Converting out[:Hubbard] to correct type", eltype(hub_block)
-        hub_block =  HubbardStateTuple.(hub_block)
+        hub_block = HubbardStateTuple.(hub_block)
         @warn "Converted", eltype(hub_block)
     end
-
 
     if !haskey(out, :Hubbard)
         out[:Hubbard] = [hub_block]
@@ -601,7 +609,6 @@ function qe_parse_Hubbard_values_new(out, line, f)
         line = strip(readline(f))
     end
 
-
     return out[:hubbard_block] = dftus
 end
 
@@ -799,13 +806,11 @@ function qe_parse_pw_output(str;
         pop!(out, f, nothing)
     end
 
-
     # #  If the main `:Hubbard` vector is `Vector{Any}`, re-construct it to enforce type
     # if eltype(out[:Hubbard]) == Any
     #     @warn "Converting main :Hubbard vector to correct type"
     #     out[:Hubbard] = convert(Vector{Vector{HubbardStateTuple}}, out[:Hubbard])
     # end
-
 
     return out
 end
@@ -1332,8 +1337,8 @@ end
     To fully use Hubbard correction, use qe7.2 onwards where the input
     takes a dedicated Hubbard block.
 """
-function qe_DFTU(speciesid::Int, atsyms::AbstractVector{Symbol},
-                 parsed_flags::Dict{Symbol,Any})
+function maybe_parse_dftu(speciesid::Int, atsyms::AbstractVector{Symbol},
+                          parsed_flags::Dict{Symbol,Any})
     @warn "Try parsing Hubbard U parameters using old syntax (prior to qe7.2)."
     if haskey(parsed_flags, :Hubbard_U) && !iszero(parsed_flags[:Hubbard_U][speciesid])
         @debug "Hubbard U for atom $speciesid: $(parsed_flags[:Hubbard_U][speciesid])"
@@ -1395,19 +1400,16 @@ function extract_atoms!(parsed_flags, atsyms, atom_block, pseudo_block, hubbard_
             pseudo = elkey !== nothing ? pseudo_block.data[elkey] : Pseudo("", "", "")
         end
         speciesid = findfirst(isequal(atsym), atsyms)
-        # CHECK HERE if atom exists
-        if hubbard_block !== nothing && haskey(hubbard_block, atsym)
-            # println("pushing atsym", atsym)
-            
-            push!(atoms,
-                Atom(; name = atsym, element = Structures.element(atsym),
-                    position_cart = primv * pos,
-                    position_cryst = UnitfulAtomic.ustrip.(inv(cell) * pos),
-                    pseudo = pseudo,
-                    magnetization = qe_magnetization(speciesid, parsed_flags),
-                    dftu = hubbard_block === nothing ?
-                            qe_DFTU(speciesid, atsyms, parsed_flags) : hubbard_block[atsym]))
-        end
+
+        push!(atoms,
+              Atom(; name = atsym, element = Structures.element(atsym),
+                   position_cart = primv * pos,
+                   position_cryst = UnitfulAtomic.ustrip.(inv(cell) * pos),
+                   pseudo = pseudo,
+                   magnetization = qe_magnetization(speciesid, parsed_flags),
+                   dftu = hubbard_block === nothing ?
+                          maybe_parse_dftu(speciesid, atsyms, parsed_flags) :
+                          hubbard_block[atsym]))
     end
 
     return atoms
@@ -1574,8 +1576,11 @@ function qe_parse_calculation(file)
     end
 
     function nextcard(i)
+        if isnothing(i)
+            return length(lines) + 1
+        end
         id = findfirst(j -> j > i, card_ids)
-        return id !== nothing ? card_ids[id] : nothing
+        return isnothing(id) ? length(lines) + 1 : card_ids[id]
     end
 
     used_lineids = Int[]
@@ -1631,6 +1636,7 @@ function qe_parse_calculation(file)
         sysflags = qe_parse_flags(sysblock, nat)
 
         i_hubbard = findcard("hubbard")
+        i_hubnext = nextcard(i_hubbard)
 
         if i_hubbard !== nothing
             @debug "Parsing post qe7.2 Hubbard input"
@@ -1643,18 +1649,18 @@ function qe_parse_calculation(file)
             @debug "parsing `Hubbard` section"
             @debug "current line: " lines[i_hubbard]
             dftus = Dict{Symbol,DFTU}()
-            for k in i_hubbard+1:i_hubbard+ntyp
-                @debug k
-                if !checkbounds(Bool, lines, k)
-                    @warn "Attempted to access line $(k) which is out of bounds (file has $(length(lines)) lines). Skipping."
-                    atom_idx = k - i_hubbard
-                    missing_atom_type = atom_idx
-                    error("Expected a Hubbard card entry for atom type '$(missing_atom_type)', but found an empty line at line $(k).")
-                    continue # Skip to next iteration
-                end
-                @debug lines[k]
+
+            for k in i_hubbard+1:i_hubnext-1
+                @debug "line $k: " lines
                 push!(used_lineids, k)
-                isempty(lines[k]) && continue
+                # if !checkbounds(Bool, lines, k)
+                #     @warn "Attempted to access line $(k) which is out of bounds (file has $(length(lines)) lines). Skipping."
+                #     atom_idx = k - i_hubbard
+                #     missing_atom_type = atom_idx
+                #     error("Expected a Hubbard card entry for atom type '$(missing_atom_type)', but found an empty line at line $(k).")
+                #     continue # Skip to next iteration
+                # end
+
                 hubline = split(lines[k])
                 hubtype = hubline[1]
                 val = parse(Float64, hubline[end])

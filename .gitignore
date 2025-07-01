@@ -42,7 +42,7 @@ logs/
 
 # test assets
 assets/mpirunflags\.jl
-tests/testassets/test_job/*
+test/testassets/test_job/*
 
 # CondaPkg
 .CondaPkg/*

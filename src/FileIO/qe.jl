@@ -597,7 +597,7 @@ function qe_parse_Hubbard_values_new(out, line, f)
     rx = r"(\w)\((.+)\)\s*=\s*(\d+\.\d+)"
     lsyms = Dict{Char,Int}('s' => 0, 'p' => 1, 'd' => 2, 'f' => 3, 'g' => 4)
     while !isempty(line)
-        @debug "pasrsing hubbard: $line"
+        @debug "parsing hubbard: $line"
         m = match(rx, line)
         type, manifold, value = m.captures
         atsym = Symbol(split(manifold, "-")[1])
@@ -1400,6 +1400,17 @@ function extract_atoms!(parsed_flags, atsyms, atom_block, pseudo_block, hubbard_
             pseudo = elkey !== nothing ? pseudo_block.data[elkey] : Pseudo("", "", "")
         end
         speciesid = findfirst(isequal(atsym), atsyms)
+        
+        # handle DFT+U block 
+        dftu_entry = nothing
+        if hubbard_block === nothing
+            dftu_entry = maybe_parse_dftu(speciesid, atsyms, parsed_flags)
+        elseif haskey(hubbard_block, atsym)
+            dftu_entry = hubbard_block[atsym]
+        else
+            @info "Cannot find a Hubbard block for symbol $atsym"
+            dftu_entry = DFTU()
+        end
 
         push!(atoms,
               Atom(; name = atsym, element = Structures.element(atsym),
@@ -1407,9 +1418,7 @@ function extract_atoms!(parsed_flags, atsyms, atom_block, pseudo_block, hubbard_
                    position_cryst = UnitfulAtomic.ustrip.(inv(cell) * pos),
                    pseudo = pseudo,
                    magnetization = qe_magnetization(speciesid, parsed_flags),
-                   dftu = hubbard_block === nothing ?
-                          maybe_parse_dftu(speciesid, atsyms, parsed_flags) :
-                          hubbard_block[atsym]))
+                   dftu = dftu_entry))
     end
 
     return atoms
@@ -1673,6 +1682,13 @@ function qe_parse_calculation(file)
                 push!(dftu.types, hubtype)
                 push!(dftu.manifolds, join(manifolds, " "))
                 push!(dftu.values, val)
+                k += 1
+                # assume that Hubbard card is terminated by an empty line
+                if !checkbounds(Bool, lines, k)
+                    break
+                else
+                    line = lines[k]
+                end
             end
             # add empty DFTU object for atoms without Hubbard values
             map(atsyms) do atsym
@@ -1970,84 +1986,77 @@ end
 
 # write OSCDFT file
 function Base.write(io::IO, data::OSCDFT_Struct)
-        print("Inside func")
-        write(io, " &OSCDFT\n")
-        for (key, value) in data.parameters # Access parameters via data.parameters
-            # Format values back to string, handling floats with appropriate precision
-            value_str = if isa(value, Float64)
-                string(value)
-            else
-                string(value)
-            end
-            write(io, " $(key) = $(value_str),\n") # Add comma and newline
+    print("Inside func")
+    write(io, " &OSCDFT\n")
+    for (key, value) in data.parameters # Access parameters via data.parameters
+        # Format values back to string, handling floats with appropriate precision
+        value_str = if isa(value, Float64)
+            string(value)
+        else
+            string(value)
         end
-        write(io, "/\n")
+        write(io, " $(key) = $(value_str),\n") # Add comma and newline
+    end
+    write(io, "/\n")
 
-        # Write TARGET_OCCUPATION_NUMBERS section
-        write(io, "TARGET_OCCUPATION_NUMBERS\n")
-        # Iterate through the 4D array using CartesianIndices to get all (idx1, idx2, idx3, idx4)
-        # This naturally ensures the output order matches the input file's structure.
-        # for I in CartesianIndices(data.occupation_numbers) # Access occupation_numbers via data.occupation_numbers
-        #     idx1, idx2, idx3, idx4 = Tuple(I)
-        #     value = data.occupation_numbers[I] # Access value using CartesianIndex
+    # Write TARGET_OCCUPATION_NUMBERS section
+    write(io, "TARGET_OCCUPATION_NUMBERS\n")
+    # Iterate through the 4D array using CartesianIndices to get all (idx1, idx2, idx3, idx4)
+    # This naturally ensures the output order matches the input file's structure.
+    # for I in CartesianIndices(data.occupation_numbers) # Access occupation_numbers via data.occupation_numbers
+    #     idx1, idx2, idx3, idx4 = Tuple(I)
+    #     value = data.occupation_numbers[I] # Access value using CartesianIndex
 
-        #     # Format each number with appropriate spacing
-        #     formatted_row = join([
-        #         lpad(string(idx1), 2),
-        #         lpad(string(idx2), 2),
-        #         lpad(string(idx3), 2),
-        #         lpad(string(idx4), 2),
-        #         @sprintf("%8.3f", value)
-        #     ], " ")
-        #     write(io, " $(formatted_row)\n")
-        # end
-        for atom_idx in 1:length(data.occupation_numbers)
+    #     # Format each number with appropriate spacing
+    #     formatted_row = join([
+    #         lpad(string(idx1), 2),
+    #         lpad(string(idx2), 2),
+    #         lpad(string(idx3), 2),
+    #         lpad(string(idx4), 2),
+    #         @sprintf("%8.3f", value)
+    #     ], " ")
+    #     write(io, " $(formatted_row)\n")
+    # end
+    for atom_idx in 1:length(data.occupation_numbers)
+        if !isassigned(data.occupation_numbers, atom_idx)
+            @warn "No occupation data found for atom index $atom_idx. Skipping during write."
+            continue
+        end
 
-            if !isassigned(data.occupation_numbers, atom_idx)
-                @warn "No occupation data found for atom index $atom_idx. Skipping during write."
-                continue
-            end
+        # new version that can handle atom with different manifold size
+        current_atom_tensor = data.occupation_numbers[atom_idx]
+        # Iterate spin (next slowest), then orb1 (faster), then orb2 (fastest)
+        # dimensions are [orb2, orb1, spin] and we want spin to be slower.
 
-            
-            # new version that can handle atom with different manifold size
-            current_atom_tensor = data.occupation_numbers[atom_idx]
-            # Iterate spin (next slowest), then orb1 (faster), then orb2 (fastest)
-            # dimensions are [orb2, orb1, spin] and we want spin to be slower.
+        # Let's use nested loops to guarantee the exact order: atom, spin, orb1, orb2
+        # Dimensions: (max_orb2, max_orb1, max_spin)
+        norb2_max, norb1_max, nspin_max = size(current_atom_tensor)
 
-            # Let's use nested loops to guarantee the exact order: atom, spin, orb1, orb2
-            # Dimensions: (max_orb2, max_orb1, max_spin)
-            norb2_max, norb1_max, nspin_max = size(current_atom_tensor)
+        for nspin_idx in 1:nspin_max # Iterate spin index
+            for norb1_idx in 1:norb1_max # Iterate orb1 index
+                for norb2_idx in 1:norb2_max # Iterate orb2 index
+                    # Access the tensor using its internal order: [orb2, orb1, spin]
+                    value = current_atom_tensor[norb2_idx, norb1_idx, nspin_idx]
 
-                for nspin_idx in 1:nspin_max # Iterate spin index
-                    for norb1_idx in 1:norb1_max # Iterate orb1 index
-                        for norb2_idx in 1:norb2_max # Iterate orb2 index
-                            # Access the tensor using its internal order: [orb2, orb1, spin]
-                            value = current_atom_tensor[norb2_idx, norb1_idx, nspin_idx]
-
-                            # Output in the desired order: atom, spin, orb1, orb2
-                            formatted_row = join([
-                                lpad(string(atom_idx), 2),
-                                lpad(string(nspin_idx), 2),
-                                lpad(string(norb1_idx), 2),
-                                lpad(string(norb2_idx), 2),
-                                @sprintf("%8.3f", value)
-                            ], " ")
-                            write(io, " $(formatted_row)\n")
-                        end
-                    end
+                    # Output in the desired order: atom, spin, orb1, orb2
+                    formatted_row = join([lpad(string(atom_idx), 2),
+                                          lpad(string(nspin_idx), 2),
+                                          lpad(string(norb1_idx), 2),
+                                          lpad(string(norb2_idx), 2),
+                                          @sprintf("%8.3f", value)], " ")
+                    write(io, " $(formatted_row)\n")
                 end
+            end
         end
+    end
     return nothing
 end
 
-
 function Base.write(f::AbstractString, data::OSCDFT_Struct)
     open(f, "w") do file
-        write(file, data)
+        return write(file, data)
     end
 end
-
-
 
 # TODO: this is a bit counter-intuitive maybe?
 # Maybe tuple should be grouped into one line string

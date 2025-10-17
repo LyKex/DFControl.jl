@@ -46,16 +46,27 @@ StructTypes.StructType(::Type{DFTU}) = StructTypes.Struct()
 # manifold information will not be recovered
 function DFTU(l::Int, U::T, J0::T, α::T, β::T, J::Vector{T},
               projection_type::AbstractString) where {T<:Real}
-    Base.depwarn("`DFTU(l, U, J0, α, β, J)` is deprecated. Use `DFTU(l, types, manifolds, values, α, β, projection_type)` instead.",
-                 :DFTU)
+    Base.depwarn("`DFTU(l, U, J0, α, β, J)` is deprecated. " *
+        "Hubbard manifolds and values are not guaranteed to preserve! " *
+        "Use `DFTU(l, types, manifolds, values, α, β, projection_type)` instead.",
+        :DFTU)
     types::Vector{String}     = []
     manifolds::Vector{String} = []
     values::Vector{Float64}   = []
-    hub_types                 = ["U", "J", "J0"]
-    for (h, t) in zip([U, J0, J], hub_types)
-        push!(types, t)
+    if iszero(U)
+        push!(manifolds, "U")
         push!(manifolds, "")
-        push!(values, h)
+        push!(values, U)
+    end
+    if iszero(J0)
+        push!(manifolds, "J0")
+        push!(manifolds, "")
+        push!(values, J0)
+    end
+    if iszero(J)
+        push!(manifolds, "J")
+        push!(manifolds, "")
+        push!(values, J[1])
     end
     return DFTU(; l = l, types = types, manifolds = manifolds, values = values, α = α,
                 β = β, projection_type = projection_type)
@@ -98,14 +109,15 @@ function Base.setproperty!(dftu::DFTU, sym::Symbol, value)
     end
 end
 
-function Base.convert(::Type{DFTU},
-                      x::JLD2.ReconstructedMutable{:DFTU,(:l, :U, :J0, :α, :β, :J)})
+# for backwards compatibility when loading old jld2 file
+function Base.convert(
+    ::Type{DFTU},
+    x::JLD2.ReconstructedMutable{:DFTU,(:l, :U, :J0, :α, :β, :J)})
     return DFTU(x.l, x.U, x.J0, x.α, x.β, x.J, "ortho-atomic")
 end
-function Base.convert(::Type{DFTU},
-                      x::JLD2.ReconstructedMutable{:DFTU,
-                                                   (:l, :U, :J0, :α, :β, :J,
-                                                    :projection_type)})
+function Base.convert(
+    ::Type{DFTU},
+    x::JLD2.ReconstructedMutable{:DFTU, (:l, :U, :J0, :α, :β, :J, :projection_type)})
     return DFTU(x.l, x.U, x.J0, x.α, x.β, x.J, x.projection_type)
 end
 

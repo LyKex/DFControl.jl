@@ -4,7 +4,6 @@ const DFC = DFControl
 export DFC
 
 const DEPS_DIR = joinpath(dirname(@__DIR__), "deps")
-
 using LinearAlgebra
 using Reexport
 using Printf

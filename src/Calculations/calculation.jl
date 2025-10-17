@@ -92,8 +92,24 @@ function Calculation(name, flags, data, e, run, infile, outfile, additional_args
     return Calculation{p}(name, flags, data, e, run, infile, outfile, additional_args)
 end
 # for backward-compatibility
+Calculation{T}(name, flags, data, e, run, infile, outfile) where T <: AbstractQE = 
+    Calculation{T}(name, flags, data, e, run, infile, outfile, Dict{Any,Any}())
 Calculation(name, flags, data, e, run, infile, outfile) = 
     Calculation(name, flags, data, e, run, infile, outfile, Dict{Any,Any}())
+
+# backward compatibility for loading old jld2 file
+OldCalculationReconstructedType=
+    JLD2.ReconstructedMutable{Symbol("Calculation{QE}"), (:name, :flags, :data, :exec, :run, :infile, :outfile), Tuple{String, Dict{Symbol, Any}, Any, Any, Bool, String, String}}
+function Base.convert(
+    ::Type{U},
+    x::OldCalculationReconstructedType) where {U <: (Calculation{P} where P<:AbstractQE)}
+    return Calculation{QE}(x.name, x.flags, x.data, x.exec, x.run, x.infile, x.outfile, Dict{Any,Any}())
+end
+function Base.convert(
+    ::Type{Calculation},
+    x::OldCalculationReconstructedType)
+    return Calculation{QE}(x.name, x.flags, x.data, x.exec, x.run, x.infile, x.outfile, Dict{Any,Any}())
+end
 
 function Calculation(name::String, flags::Pair{Symbol}...; kwargs...)
     out = Calculation(; name = name, kwargs...)

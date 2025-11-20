@@ -1,9 +1,15 @@
 module DFControl
 using CondaPkg
 const DFC = DFControl
-export DFC
+export DFControl, DFC
 
 const DEPS_DIR = joinpath(dirname(@__DIR__), "deps")
+if any(x -> !ispath(joinpath(DEPS_DIR, x)),
+       ("wannier90flags.jl", "qeflags.jl", "abinitflags.jl", "elkflags.jl",
+        "qe7.2flags.jl"))
+    include(joinpath(DEPS_DIR, "build.jl"))
+end
+
 using LinearAlgebra
 using Reexport
 using Printf

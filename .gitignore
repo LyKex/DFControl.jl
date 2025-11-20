@@ -28,24 +28,19 @@ docs/site/
 # environment.
 Manifest.toml
 
-# package specific
-user_defaults/*
+# mac os
 .DS_Store
-deps/mpirunflags\.jl
-deps/wannier90flags\.jl
-deps/qeflags\.jl
-deps/abinitflags\.jl
-deps/spglib/
-deps/elkflags\.jl
-deps/qe7.2flags.jl
-logs/
 
-# test assets (TODO should be put into artifacts)
-assets/mpirunflags\.jl
-test/testassets/test_job/*
+# logs
+logs/manifest_usage.toml
 
 # CondaPkg
 .CondaPkg/*
 
+# package assets (TODO use Artifact or ScratchSpace)
+user_defaults/*
+assets/mpirunflags\.jl
+test/testassets/test_job/*
 docs/src/assets/
 assets/calculations
+

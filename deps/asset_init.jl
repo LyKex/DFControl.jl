@@ -1,6 +1,8 @@
 using StaticArrays
 const Vec = SVector
 
+const DEPS_DIR = joinpath(dirname(@__DIR__), "deps")
+
 function writefbodyline(f, indent, s)
     for i in 1:indent
         write(f, "\t")
@@ -32,9 +34,9 @@ function fort2julia(f_type)
 end
 indentabs(indent) = prod(["\t" for i in 1:indent])
 
-open(joinpath(@__DIR__, "wannier90flags.jl"), "w") do wf
+open(joinpath(DEPS_DIR, "wannier90flags.jl"), "w") do wf
     write(wf, "_WAN_FLAGS() = Dict{Symbol, Type}(\n")
-    open(joinpath(@__DIR__, "..", "assets", "calculations", "wannier",
+    open(joinpath(DEPS_DIR, "..", "assets", "calculations", "wannier",
                   "calculation_flags.txt"), "r") do f
         while !eof(f)
             line = readline(f)
@@ -234,11 +236,11 @@ function write_QECalculationInfo(wf, filename, indent, exec)
 end
 
 searchdir(path::String, key) = filter(x -> occursin(key, x), readdir(path))
-open(joinpath(@__DIR__, "qeflags.jl"), "w") do wf
+open(joinpath(DEPS_DIR, "qeflags.jl"), "w") do wf
     write(wf, "_QEINPUTINFOS() = QECalculationInfo[\n")
-    calculation_files = searchdir(joinpath(@__DIR__, "..", "assets", "calculations", "qe"),
+    calculation_files = searchdir(joinpath(DEPS_DIR, "..", "assets", "calculations", "qe"),
                                   "INPUT")
-    filepaths = joinpath.(Ref(joinpath(@__DIR__, "..", "assets", "calculations", "qe")),
+    filepaths = joinpath.(Ref(joinpath(DEPS_DIR, "..", "assets", "calculations", "qe")),
                           calculation_files)
     for _f in filepaths
         exec_name = join([lowercase(splitext(split(_f, "_")[end])[1]), ".x"], "")
@@ -247,11 +249,11 @@ open(joinpath(@__DIR__, "qeflags.jl"), "w") do wf
     return write(wf, "]")
 end
 
-open(joinpath(@__DIR__, "qe7.2flags.jl"), "w") do wf
+open(joinpath(DEPS_DIR, "qe7.2flags.jl"), "w") do wf
     write(wf, "_QE7_2INPUTINFOS() = QECalculationInfo[\n")
-    calculation_files = searchdir(joinpath(@__DIR__, "..", "assets", "calculations", "qe"),
+    calculation_files = searchdir(joinpath(DEPS_DIR, "..", "assets", "calculations", "qe"),
                                   "INPUT")
-    filepaths = joinpath.(Ref(joinpath(@__DIR__, "..", "assets", "calculations", "qe")),
+    filepaths = joinpath.(Ref(joinpath(DEPS_DIR, "..", "assets", "calculations", "qe")),
                           calculation_files)
     for _f in filepaths
         exec_name = join([lowercase(splitext(split(_f, "_")[end])[1]), ".x"], "")
@@ -260,8 +262,8 @@ open(joinpath(@__DIR__, "qe7.2flags.jl"), "w") do wf
     return write(wf, "]")
 end
 
-open(joinpath(@__DIR__, "abinitflags.jl"), "w") do wf
-    flaglines = split.(readlines(joinpath(@__DIR__, "..", "assets", "calculations",
+open(joinpath(DEPS_DIR, "abinitflags.jl"), "w") do wf
+    flaglines = split.(readlines(joinpath(DEPS_DIR, "..", "assets", "calculations",
                                           "abinit", "calculation_variables.txt")))
     write(wf, "_ABINITFLAGS() = Dict{Symbol, Type}(\n")
     for (fl, typ) in flaglines
@@ -399,9 +401,10 @@ function read_elk_doc(fn::String)
     return blocks
 end
 
-ELK_CONTROLBLOCKS = read_elk_doc(joinpath(@__DIR__, "..", "assets", "calculations", "elk",
+ELK_CONTROLBLOCKS = read_elk_doc(joinpath(DEPS_DIR, "..", "assets", "calculations", "elk",
                                           "elk.txt"))
-
-open(joinpath(@__DIR__, "elkflags.jl"), "w") do f
-    return write(f, "_ELK_CONTROLBLOCKS() = $(repr(ELK_CONTROLBLOCKS))")
+export ElkControlBlockInfo, ElkFlagInfo
+open(joinpath(DEPS_DIR, "elkflags.jl"), "w") do f
+    file_content = replace(repr(ELK_CONTROLBLOCKS), "DFControl." => "")
+    return write(f, "_ELK_CONTROLBLOCKS() = $file_content")
 end

@@ -1,5 +1,3 @@
-include(joinpath(DEPS_DIR, "elkflags.jl"))
-
 struct ElkFlagInfo{T}
     name::Symbol
     default::Union{T,Nothing}  #check again v0.7 Some
@@ -14,6 +12,8 @@ struct ElkControlBlockInfo <: AbstractBlockInfo
     description::String
 end
 
+# define controlblocks
+include(joinpath(DEPS_DIR, "elkflags.jl"))
 const ELK_CONTROLBLOCKS = _ELK_CONTROLBLOCKS()
 
 function elk_flaginfo(flag::Symbol)

@@ -81,6 +81,7 @@ function extract_structure(cell_block, atoms_block, projections_block,
 end
 
 function wan_parse_calculation(file)
+    @info "parsing wannier90 calculation from file: " file
     if file isa IO || !occursin("\n", file)
         contents = readlines(file)
     else

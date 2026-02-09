@@ -10,7 +10,6 @@ using RemoteHPC: Server, isalive
 
 include("printing.jl")
 include("pluto.jl")
-include("base.jl")
 
 function __init__()
     @require Glimpse = "f6e19d58-12a4-5927-8606-ac30a9ce9b69" include("glimpse.jl")

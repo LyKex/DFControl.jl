@@ -1,4 +1,5 @@
 function julia_parse_calculation(file)
+    @info "parsing julia calculation from file: " file
     if file isa IO || !occursin("\n", file)
         contents = read(file, String)
     else

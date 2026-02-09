@@ -7,6 +7,7 @@ If no exact matching directory is found, a list of job directories that comprise
 `j.dir` will be returned.
 """
 function RemoteHPC.load(server::Server, j::Job)
+    @info "loading job from server: " server.name " at directory: " j.dir
     j.server = server.name
     
     if j.version == last_version(server, j.dir)

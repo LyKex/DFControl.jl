@@ -563,7 +563,7 @@ function qe_parse_Hubbard_energy(out, line, f)
 end
 
 """
-    parsing Hubbard values from output
+    parsing Hubbard values from pw output (pre qe7.2)
 """
 function qe_parse_Hubbard_values(out, line, f)
     # to properly parse this block, need to understand how the supercell is
@@ -584,8 +584,11 @@ function qe_parse_Hubbard_values(out, line, f)
     return out[:Hubbard_values] = hubbard_values
 end
 
+"""
+    parsing Hubbard values from pw output (post qe7.2)
+"""
 function qe_parse_Hubbard_values_new(out, line, f)
-    @warn "Preliminary implementation of Hubbard values parsing from pw output"
+    # TODO add test for Hubbad type other than U
     #  Hubbard projectors: ortho-atomic
     #  Hubbard parameters of DFT+U (Dudarev formulation) in eV:
     #  U(Ni-3d)  =  4.0000
@@ -1408,7 +1411,7 @@ function extract_atoms!(parsed_flags, atsyms, atom_block, pseudo_block, hubbard_
         elseif haskey(hubbard_block, atsym)
             dftu_entry = hubbard_block[atsym]
         else
-            @info "Cannot find a Hubbard block for symbol $atsym"
+            @debug "No Hubbard block found for symbol $atsym"
             dftu_entry = DFTU()
         end
 
@@ -1532,7 +1535,7 @@ are allowed in this calculation file, and convert the read values to the correct
 Returns a `Calculation{QE}` and the `Structure` that is found in the calculation.
 """
 function qe_parse_calculation(file)
-    @debug "parsing file: " file
+    @info "parsing qe calculation from file: " file
     if file isa IO || !occursin("\n", file)
         contents = readlines(file)
     else

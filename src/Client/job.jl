@@ -196,41 +196,59 @@ function RemoteHPC.save(job::Job, workflow = nothing; versioncheck=true, kwargs.
         end
     end
     
-    # Here we lazily pull pseudos that are not located on the server we're sending stuff to
+    # Upload pseudos to the RemoteHPC config directory and symlink from job dir.
+    # This avoids duplicates across jobs and prevents self-linking.
+    pseudo_central_dir = RemoteHPC.config_path(server, "pseudos")
+    mkpath(server, pseudo_central_dir)
+
     pseudos = unique(y->y[1], map(x->(x.element.symbol, x.pseudo), job.structure.atoms))
     for (el, p) in pseudos
 
         if p == Pseudo()
             error("Pseudo not set for element $el. Use `set_pseudos!`.")
         end
-        
-        if p.server !== job.server
-            p.pseudo = isempty(p.pseudo) && !isempty(p.server) && isalive(Server(p.server)) && ispath(Server(p.server), p.path) ? read(Server(p.server), p.path, String) : p.pseudo
-            p.server = job.server
-            p.path = joinpath(job, "$el.UPF") 
-            for a in job.structure[element(el)]
-                a.pseudo = p
+
+        # Determine the filename in the central store from the original path, falling back to "$el.UPF"
+        pseudo_fname = !isempty(p.path) ? basename(p.path) : "$el.UPF"
+        central_path = joinpath(pseudo_central_dir, pseudo_fname)
+
+        # Upload pseudo content to central store if not already present
+        if !ispath(server, central_path)
+            if !isempty(p.pseudo)
+                # Content is cached in memory (e.g. loaded from a PseudoSet)
+                write(server, central_path, p.pseudo)
+            elseif p.server == job.server && !isempty(p.path) && ispath(server, p.path)
+                # Same server: copy from current location to central store
+                cp(server, p.path, central_path)
+            elseif !isempty(p.server) && isalive(Server(p.server)) && ispath(Server(p.server), p.path)
+                # Different server: fetch and upload
+                write(server, central_path, read(Server(p.server), p.path, String))
+            else
+                error("Cannot locate pseudo for element $el at $(p.path). Use `set_pseudos!` to reset them.")
             end
         end
-        # Pseudo was not present yet
-        if !isempty(p.pseudo)
-            write(server, p.path, p.pseudo)
-            p.pseudo = ""
+
+        # Clear in-memory content and update pseudo reference to central location
+        p.pseudo = ""
+        p.server = job.server
+        p.path = central_path
+        for a in job.structure[element(el)]
+            a.pseudo = p
         end
-        
+
+        if !ispath(server, central_path)
+            error("Pseudo at $(central_path) does not exist. Use `set_pseudos!` to reset them.")
+        end
+
+        # Create/update symlink in job dir pointing to central store
         linkpath = joinpath(job, "$el.UPF")
-        if !ispath(server, linkpath) || p.path != realpath(server, linkpath) 
-            if ispath(server, linkpath)
+        if ispath(server, linkpath)
+            if realpath(server, linkpath) != central_path
                 rm(server, linkpath)
+                symlink(server, central_path, linkpath)
             end
-            try
-                symlink(server, p.path, linkpath)
-            catch
-                nothing
-            end
-        end
-        if !ispath(server, p.path)
-            error("Pseudo at $(p.path) does not really exist. Use `set_pseudos!` to reset them.")
+        else
+            symlink(server, central_path, linkpath)
         end
     end
     Calculations.rm_tmp_flags!.(job.calculations)

@@ -89,3 +89,32 @@ end
     @test ispath(joinpath(Jobs.main_job_dir(job), Jobs.VERSION_DIR_NAME,
                           "$(curver + 2)"))
 end
+
+@testset "pseudo central store" begin
+    using RemoteHPC
+    job = load(test_server, Job(testjobpath))
+    save(job; fillexecs = false)
+
+    pseudo_central_dir = RemoteHPC.config_path(test_server, "pseudos")
+
+    for a in unique(job.structure.atoms)
+        el = a.element.symbol
+        # Pseudo path must be inside the central store
+        @test startswith(a.pseudo.path, pseudo_central_dir)
+        # File must exist
+        @test ispath(a.pseudo.path)
+        # Symlink in job dir must resolve to the central store file
+        linkpath = joinpath(abspath(job), "$el.UPF")
+        @test ispath(linkpath)
+        @test realpath(linkpath) == a.pseudo.path
+    end
+
+    # Second save is idempotent: no errors, symlinks unchanged
+    save(job; fillexecs = false)
+    for a in unique(job.structure.atoms)
+        el = a.element.symbol
+        linkpath = joinpath(abspath(job), "$el.UPF")
+        @test ispath(linkpath)
+        @test realpath(linkpath) == a.pseudo.path
+    end
+end

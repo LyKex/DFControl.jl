@@ -40,7 +40,7 @@ spglib_jll = "ac4a9f1e-bdb2-5204-990c-47c8b2f70d4e"
 [compat]
 ANSIColoredPrinters = "^0.0.1"
 BinDeps = "^1"
-CodeTracking = "^1"
+CodeTracking = "^1, 2"
 Colors = "^0.12"
 CondaPkg = "0.2.24"
 Crayons = "^4"
